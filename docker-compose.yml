@@ -1,0 +1,21 @@
+services:
+  api:
+    build: ./backend
+    expose:
+      - "8000"
+    volumes:
+      - fatapp_data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/fatapp.db
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  fatapp_data:
