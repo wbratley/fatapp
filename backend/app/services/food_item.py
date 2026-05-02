@@ -1,7 +1,13 @@
 from fastapi import HTTPException, status
 
+from app.clients.open_food_facts import OpenFoodFactsClient
 from app.repositories.food_item import FoodItemRepository
-from app.schemas.food_item import FoodItemCreate, FoodItemResponse, FoodItemUpdate
+from app.schemas.food_item import (
+    BarcodeLookupResponse,
+    FoodItemCreate,
+    FoodItemResponse,
+    FoodItemUpdate,
+)
 
 
 class FoodItemService:
@@ -47,6 +53,22 @@ class FoodItemService:
             calories_per_100g=payload.calories_per_100g,
         )
         return FoodItemResponse.model_validate(item)
+
+    def add_by_barcode(self, barcode: str, client: OpenFoodFactsClient) -> BarcodeLookupResponse:
+        existing = self._repo.get_by_barcode(barcode)
+        if existing is not None:
+            return BarcodeLookupResponse(
+                found=True, food_item=FoodItemResponse.model_validate(existing)
+            )
+        product = client.lookup(barcode)
+        if product is None:
+            return BarcodeLookupResponse(found=False)
+        item = self._repo.create(
+            name=product.name,
+            barcode=barcode,
+            calories_per_100g=product.calories_per_100g,
+        )
+        return BarcodeLookupResponse(found=True, food_item=FoodItemResponse.model_validate(item))
 
     def delete_food_item(self, item_id: int) -> None:
         item = self._repo.get_by_id(item_id)

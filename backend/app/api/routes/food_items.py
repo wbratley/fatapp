@@ -1,9 +1,15 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
+from app.clients.open_food_facts import OpenFoodFactsClient
 from app.database import get_db
 from app.repositories.food_item import FoodItemRepository
-from app.schemas.food_item import FoodItemCreate, FoodItemResponse, FoodItemUpdate
+from app.schemas.food_item import (
+    BarcodeLookupResponse,
+    FoodItemCreate,
+    FoodItemResponse,
+    FoodItemUpdate,
+)
 from app.services.food_item import FoodItemService
 
 router = APIRouter(prefix="/food-items", tags=["food-items"])
@@ -49,3 +55,12 @@ def delete_food_item(
     item_id: int, service: FoodItemService = Depends(get_service)
 ) -> None:
     service.delete_food_item(item_id)
+
+
+@router.post("/barcode/{barcode}", response_model=BarcodeLookupResponse)
+def add_by_barcode(
+    barcode: str,
+    service: FoodItemService = Depends(get_service),
+    off_client: OpenFoodFactsClient = Depends(OpenFoodFactsClient),
+) -> BarcodeLookupResponse:
+    return service.add_by_barcode(barcode, off_client)

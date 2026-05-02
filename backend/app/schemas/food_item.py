@@ -24,3 +24,8 @@ class FoodItemResponse(FoodItemBase):
     deleted_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class BarcodeLookupResponse(BaseModel):
+    found: bool
+    food_item: FoodItemResponse | None = None

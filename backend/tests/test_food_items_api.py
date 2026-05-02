@@ -1,5 +1,11 @@
 """API integration tests for food items."""
+from unittest.mock import MagicMock
+
+import pytest
 from fastapi.testclient import TestClient
+
+from app.clients.open_food_facts import OpenFoodFactsClient, ProductInfo
+from app.main import app
 
 
 class TestListFoodItems:
@@ -147,3 +153,63 @@ class TestDeleteFoodItem:
         client.delete(f"/api/v1/food-items/{created['id']}")
         r = client.delete(f"/api/v1/food-items/{created['id']}")
         assert r.status_code == 422
+
+
+@pytest.fixture()
+def off_found(client: TestClient) -> MagicMock:
+    mock = MagicMock(spec=OpenFoodFactsClient)
+    mock.lookup.return_value = ProductInfo(name="Nutella", calories_per_100g=539.0)
+    app.dependency_overrides[OpenFoodFactsClient] = lambda: mock
+    return mock
+
+
+@pytest.fixture()
+def off_not_found(client: TestClient) -> MagicMock:
+    mock = MagicMock(spec=OpenFoodFactsClient)
+    mock.lookup.return_value = None
+    app.dependency_overrides[OpenFoodFactsClient] = lambda: mock
+    return mock
+
+
+class TestAddByBarcode:
+    BC = "3017620422003"
+
+    def test_creates_item_from_off(
+        self, client: TestClient, off_found: MagicMock
+    ) -> None:
+        r = client.post(f"/api/v1/food-items/barcode/{self.BC}")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["found"] is True
+        assert data["food_item"]["name"] == "Nutella"
+        assert data["food_item"]["barcode"] == self.BC
+        assert data["food_item"]["calories_per_100g"] == pytest.approx(539.0)
+
+    def test_returns_not_found_when_off_has_no_match(
+        self, client: TestClient, off_not_found: MagicMock
+    ) -> None:
+        r = client.post(f"/api/v1/food-items/barcode/{self.BC}")
+        assert r.status_code == 200
+        assert r.json()["found"] is False
+        assert r.json()["food_item"] is None
+
+    def test_returns_existing_item_without_calling_off(
+        self, client: TestClient, off_found: MagicMock
+    ) -> None:
+        client.post(
+            "/api/v1/food-items/",
+            json={"name": "Existing", "calories_per_100g": 100.0, "barcode": self.BC},
+        )
+        off_found.lookup.reset_mock()
+        r = client.post(f"/api/v1/food-items/barcode/{self.BC}")
+        assert r.status_code == 200
+        assert r.json()["found"] is True
+        assert r.json()["food_item"]["name"] == "Existing"
+        off_found.lookup.assert_not_called()
+
+    def test_item_persisted_after_off_lookup(
+        self, client: TestClient, off_found: MagicMock
+    ) -> None:
+        client.post(f"/api/v1/food-items/barcode/{self.BC}")
+        items = client.get("/api/v1/food-items/").json()
+        assert any(i["barcode"] == self.BC for i in items)

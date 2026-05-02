@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import HTTPException
 
+from app.clients.open_food_facts import OpenFoodFactsClient, ProductInfo
 from app.models.food_item import FoodItem
 from app.schemas.food_item import FoodItemCreate, FoodItemUpdate
 from app.services.food_item import FoodItemService
@@ -146,3 +147,44 @@ class TestDeleteFoodItem:
         with pytest.raises(HTTPException) as exc:
             service.delete_food_item(1)
         assert exc.value.status_code == 422
+
+
+class TestAddByBarcode:
+    def test_returns_existing_item_without_hitting_api(
+        self, service: FoodItemService, repo: MagicMock
+    ) -> None:
+        repo.get_by_barcode.return_value = make_food_item(
+            1, "Nutella", 539.0, barcode="3017620422003"
+        )
+        off = MagicMock(spec=OpenFoodFactsClient)
+        result = service.add_by_barcode("3017620422003", off)
+        assert result.found is True
+        assert result.food_item is not None
+        assert result.food_item.name == "Nutella"
+        off.lookup.assert_not_called()
+
+    def test_creates_item_when_found_on_off(
+        self, service: FoodItemService, repo: MagicMock
+    ) -> None:
+        repo.get_by_barcode.return_value = None
+        off = MagicMock(spec=OpenFoodFactsClient)
+        off.lookup.return_value = ProductInfo(name="Nutella", calories_per_100g=539.0)
+        repo.create.return_value = make_food_item(1, "Nutella", 539.0, barcode="3017620422003")
+        result = service.add_by_barcode("3017620422003", off)
+        assert result.found is True
+        assert result.food_item is not None
+        assert result.food_item.name == "Nutella"
+        repo.create.assert_called_once_with(
+            name="Nutella", barcode="3017620422003", calories_per_100g=539.0
+        )
+
+    def test_returns_not_found_when_off_has_no_match(
+        self, service: FoodItemService, repo: MagicMock
+    ) -> None:
+        repo.get_by_barcode.return_value = None
+        off = MagicMock(spec=OpenFoodFactsClient)
+        off.lookup.return_value = None
+        result = service.add_by_barcode("0000000000000", off)
+        assert result.found is False
+        assert result.food_item is None
+        repo.create.assert_not_called()
