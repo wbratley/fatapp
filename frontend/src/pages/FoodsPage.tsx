@@ -1,9 +1,17 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Trash2, Plus, X } from 'lucide-react'
+import { Pencil, Trash2, Plus, X, ScanBarcode } from 'lucide-react'
 import { Header } from '../components/Header'
 import { BottomNav } from '../components/BottomNav'
-import { fetchFoodItems, createFoodItem, updateFoodItem, deleteFoodItem } from '../api/client'
+import { BarcodeScanner } from '../components/BarcodeScanner'
+import { Toast } from '../components/Toast'
+import {
+  fetchFoodItems,
+  createFoodItem,
+  updateFoodItem,
+  deleteFoodItem,
+  lookupBarcode,
+} from '../api/client'
 import { FoodItem } from '../types'
 
 interface ModalState {
@@ -26,10 +34,18 @@ const CLOSED: ModalState = {
   error: '',
 }
 
+interface ToastState {
+  msg: string
+  type: 'success' | 'error'
+}
+
 export function FoodsPage() {
   const queryClient = useQueryClient()
   const [modal, setModal] = useState<ModalState>(CLOSED)
   const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [scannerOpen, setScannerOpen] = useState(false)
+  const [toast, setToast] = useState<ToastState | null>(null)
+  const [lookingUp, setLookingUp] = useState(false)
 
   const { data: foodItems = [], isLoading } = useQuery<FoodItem[]>({
     queryKey: ['food-items'],
@@ -91,9 +107,45 @@ export function FoodsPage() {
     saveMutation.mutate()
   }
 
+  async function handleBarcodeDetected(barcode: string) {
+    setScannerOpen(false)
+    setLookingUp(true)
+    try {
+      const result = await lookupBarcode(barcode)
+      if (result.found && result.food_item) {
+        const alreadyInList = foodItems.some((f) => f.id === result.food_item!.id)
+        if (alreadyInList) {
+          setToast({ msg: `Already in your list: ${result.food_item.name}`, type: 'error' })
+        } else {
+          invalidate()
+          setToast({ msg: `Added ${result.food_item.name}`, type: 'success' })
+        }
+      } else {
+        // Not found on Open Food Facts — open add modal with barcode pre-filled
+        setModal({
+          open: true,
+          mode: 'add',
+          item: null,
+          name: '',
+          calories: '',
+          barcode,
+          error: '',
+        })
+      }
+    } catch (e) {
+      setToast({ msg: (e as Error).message, type: 'error' })
+    } finally {
+      setLookingUp(false)
+    }
+  }
+
   return (
     <div className="min-h-screen">
       <Header />
+
+      {toast && (
+        <Toast message={toast.msg} type={toast.type} onDismiss={() => setToast(null)} />
+      )}
 
       <main className="max-w-2xl mx-auto px-4 py-6 pb-24">
         <div className="card overflow-hidden">
@@ -169,7 +221,20 @@ export function FoodsPage() {
         </div>
       </main>
 
-      {/* FAB */}
+      {/* FABs */}
+      <button
+        onClick={() => setScannerOpen(true)}
+        disabled={lookingUp}
+        className="fixed bottom-36 right-4 z-30 w-14 h-14 rounded-full bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white shadow-lg flex items-center justify-center transition-colors"
+        title="Scan barcode"
+      >
+        {lookingUp ? (
+          <div className="w-5 h-5 rounded-full border-2 border-white border-t-transparent animate-spin" />
+        ) : (
+          <ScanBarcode size={22} />
+        )}
+      </button>
+
       <button
         onClick={openAdd}
         className="fixed bottom-20 right-4 z-30 w-14 h-14 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg flex items-center justify-center transition-colors"
@@ -180,7 +245,15 @@ export function FoodsPage() {
 
       <BottomNav />
 
-      {/* Modal */}
+      {/* Barcode scanner */}
+      {scannerOpen && (
+        <BarcodeScanner
+          onDetected={handleBarcodeDetected}
+          onClose={() => setScannerOpen(false)}
+        />
+      )}
+
+      {/* Add / edit modal */}
       {modal.open && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40"
