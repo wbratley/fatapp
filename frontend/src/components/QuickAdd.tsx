@@ -53,7 +53,7 @@ export function QuickAdd() {
       <form onSubmit={handleSubmit} className="flex items-end gap-3">
         <div className="flex-1">
           <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
-            Weight (kg)
+            Weight (lbs)
           </label>
           <input
             type="number"

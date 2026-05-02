@@ -33,11 +33,11 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
   return (
     <div className="card px-3.5 py-2.5 shadow-xl">
       <p className="text-xs text-slate-400 dark:text-zinc-500 mb-0.5">
-        {format(parseISO(entry.date), 'EEEE, d MMMM yyyy')}
+        {format(parseISO(entry.date), 'EEEE, dd/MM/yyyy')}
       </p>
       <p className="text-lg font-semibold text-slate-900 dark:text-zinc-50">
         {entry.weight.toFixed(1)}{' '}
-        <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">kg</span>
+        <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">lbs</span>
       </p>
     </div>
   )
@@ -92,7 +92,7 @@ export function WeightGraph({ entries, period }: Props) {
           <p className="text-xs text-slate-400 dark:text-zinc-500">Latest</p>
           <p className="text-xl font-semibold text-slate-900 dark:text-zinc-50">
             {last.toFixed(1)}{' '}
-            <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">kg</span>
+            <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">lbs</span>
           </p>
         </div>
         {entries.length > 1 && (
@@ -115,7 +115,7 @@ export function WeightGraph({ entries, period }: Props) {
                 <Minus size={16} />
               )}
               {delta > 0 ? '+' : ''}
-              {delta.toFixed(1)} kg
+              {delta.toFixed(1)} lbs
             </p>
           </div>
         )}
@@ -123,7 +123,7 @@ export function WeightGraph({ entries, period }: Props) {
           <p className="text-xs text-slate-400 dark:text-zinc-500 text-right">Avg</p>
           <p className="text-xl font-semibold text-slate-900 dark:text-zinc-50 text-right">
             {avg.toFixed(1)}{' '}
-            <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">kg</span>
+            <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">lbs</span>
           </p>
         </div>
       </div>

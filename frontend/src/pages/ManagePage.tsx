@@ -9,7 +9,7 @@ import { WeightEntry } from '../types'
 const PAGE_SIZE = 15
 
 function formatDate(iso: string) {
-  return format(parseISO(iso), 'd MMM yyyy')
+  return format(parseISO(iso), 'dd/MM/yyyy')
 }
 
 function todayStr() {
@@ -119,7 +119,7 @@ export function ManagePage() {
           <form onSubmit={handleAdd} className="flex items-end gap-3">
             <div className="flex-1">
               <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
-                Weight (kg)
+                Weight (lbs)
               </label>
               <input
                 type="number"
@@ -221,7 +221,7 @@ export function ManagePage() {
                           ) : (
                             <span className="font-medium text-slate-900 dark:text-zinc-100">
                               {entry.weight.toFixed(1)}{' '}
-                              <span className="font-normal text-slate-400 dark:text-zinc-500">kg</span>
+                              <span className="font-normal text-slate-400 dark:text-zinc-500">lbs</span>
                             </span>
                           )}
                         </td>
