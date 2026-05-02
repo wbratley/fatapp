@@ -9,14 +9,14 @@ import {
   ReferenceLine,
   type TooltipProps,
 } from 'recharts'
-import { format, parseISO } from 'date-fns'
+import { format, parseISO, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
 import { TrendingDown, TrendingUp, Minus, Activity } from 'lucide-react'
 import { WeightEntry, Period } from '../types'
 import { usePreferences } from '../context/PreferencesContext'
 
 function tickFormatter(period: Period) {
-  return (dateStr: string) => {
-    const d = parseISO(dateStr)
+  return (ts: number) => {
+    const d = new Date(ts)
     switch (period) {
       case 'week':    return format(d, 'EEE d')
       case 'month':   return format(d, 'd MMM')
@@ -24,6 +24,25 @@ function tickFormatter(period: Period) {
       case 'year':    return format(d, 'MMM')
       case 'all':     return format(d, "MMM ''yy")
     }
+  }
+}
+
+function generateTicks(entries: WeightEntry[], period: Period): number[] {
+  if (entries.length < 2) return entries.map(e => parseISO(e.date).getTime())
+  const start = parseISO(entries[0].date)
+  const end = parseISO(entries[entries.length - 1].date)
+  switch (period) {
+    case 'week':
+      return eachDayOfInterval({ start, end }).map(d => d.getTime())
+    case 'month':
+      return eachWeekOfInterval({ start, end }).map(d => d.getTime())
+    case '3months': {
+      const weeks = eachWeekOfInterval({ start, end })
+      return weeks.filter((_, i) => i % 2 === 0).map(d => d.getTime())
+    }
+    case 'year':
+    case 'all':
+      return eachMonthOfInterval({ start, end }).map(d => d.getTime())
   }
 }
 
@@ -76,7 +95,8 @@ export function WeightGraph({ entries, period }: Props) {
   const delta = last - first
   const avg = weights.reduce((a, b) => a + b, 0) / weights.length
 
-  const tickInterval = Math.max(0, Math.floor(entries.length / 7) - 1)
+  const chartData = entries.map(e => ({ ...e, timestamp: parseISO(e.date).getTime() }))
+  const ticks = generateTicks(entries, period)
   const showDots = entries.length <= 30
 
   const strokeColor = isDark ? '#818cf8' : '#4f46e5'
@@ -130,7 +150,7 @@ export function WeightGraph({ entries, period }: Props) {
 
       {/* Chart */}
       <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={entries} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
           <defs>
             <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={strokeColor} stopOpacity={isDark ? 0.25 : 0.2} />
@@ -145,9 +165,12 @@ export function WeightGraph({ entries, period }: Props) {
           />
 
           <XAxis
-            dataKey="date"
+            dataKey="timestamp"
+            type="number"
+            scale="time"
+            domain={['dataMin', 'dataMax']}
+            ticks={ticks}
             tickFormatter={tickFormatter(period)}
-            interval={tickInterval}
             tick={{ fill: axisColor, fontSize: 11 }}
             axisLine={false}
             tickLine={false}
