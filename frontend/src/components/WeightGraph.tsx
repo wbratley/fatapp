@@ -1,6 +1,7 @@
 import {
-  AreaChart,
+  ComposedChart,
   Area,
+  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -11,8 +12,14 @@ import {
 } from 'recharts'
 import { format, parseISO, eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval } from 'date-fns'
 import { TrendingDown, TrendingUp, Minus, Activity } from 'lucide-react'
-import { WeightEntry, Period } from '../types'
+import { WeightEntry, Period, DAILY_TARGET_KCAL } from '../types'
 import { usePreferences } from '../context/PreferencesContext'
+
+interface ChartPoint {
+  timestamp: number
+  weight?: number
+  calories?: number
+}
 
 function tickFormatter(period: Period) {
   return (ts: number) => {
@@ -48,16 +55,24 @@ function generateTicks(entries: WeightEntry[], period: Period): number[] {
 
 function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
   if (!active || !payload?.length) return null
-  const entry = payload[0].payload as WeightEntry
+  const point = payload[0].payload as ChartPoint
   return (
     <div className="card px-3.5 py-2.5 shadow-xl">
       <p className="text-xs text-slate-400 dark:text-zinc-500 mb-0.5">
-        {format(parseISO(entry.date), 'EEEE, dd/MM/yyyy')}
+        {format(new Date(point.timestamp), 'EEEE, dd/MM/yyyy')}
       </p>
-      <p className="text-lg font-semibold text-slate-900 dark:text-zinc-50">
-        {entry.weight.toFixed(1)}{' '}
-        <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">lbs</span>
-      </p>
+      {point.weight !== undefined && (
+        <p className="text-lg font-semibold text-slate-900 dark:text-zinc-50">
+          {point.weight.toFixed(1)}{' '}
+          <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">lbs</span>
+        </p>
+      )}
+      {point.calories !== undefined && (
+        <p className="text-base font-semibold text-amber-500">
+          {Math.round(point.calories)}{' '}
+          <span className="text-sm font-normal text-slate-400 dark:text-zinc-500">kcal</span>
+        </p>
+      )}
     </div>
   )
 }
@@ -65,9 +80,10 @@ function CustomTooltip({ active, payload }: TooltipProps<number, string>) {
 interface Props {
   entries: WeightEntry[]
   period: Period
+  caloriesByDate?: Record<string, number>
 }
 
-export function WeightGraph({ entries, period }: Props) {
+export function WeightGraph({ entries, period, caloriesByDate }: Props) {
   const { preferences } = usePreferences()
   const isDark = preferences.theme === 'dark'
 
@@ -95,7 +111,28 @@ export function WeightGraph({ entries, period }: Props) {
   const delta = last - first
   const avg = weights.reduce((a, b) => a + b, 0) / weights.length
 
-  const chartData = entries.map(e => ({ ...e, timestamp: parseISO(e.date).getTime() }))
+  // Build merged chart data from weight entries + calorie records
+  const pointsByDate = new Map<string, ChartPoint>()
+  entries.forEach(e => {
+    const dateKey = e.date.split('T')[0]
+    pointsByDate.set(dateKey, { timestamp: parseISO(e.date).getTime(), weight: e.weight })
+  })
+  if (caloriesByDate) {
+    Object.entries(caloriesByDate).forEach(([dateKey, cals]) => {
+      const existing = pointsByDate.get(dateKey)
+      if (existing) {
+        existing.calories = cals
+      } else {
+        pointsByDate.set(dateKey, { timestamp: parseISO(dateKey).getTime(), calories: cals })
+      }
+    })
+  }
+  const chartData = Array.from(pointsByDate.values()).sort((a, b) => a.timestamp - b.timestamp)
+
+  const hasCalories = caloriesByDate && Object.keys(caloriesByDate).length > 0
+  const maxCals = hasCalories ? Math.max(0, ...Object.values(caloriesByDate!)) : 0
+  const calDomainMax = Math.ceil(Math.max(DAILY_TARGET_KCAL, maxCals) * 1.15)
+
   const ticks = generateTicks(entries, period)
   const showDots = entries.length <= 30
 
@@ -103,6 +140,7 @@ export function WeightGraph({ entries, period }: Props) {
   const gridColor = isDark ? '#27272a' : '#f1f5f9'
   const axisColor = isDark ? '#52525b' : '#94a3b8'
   const avgLineColor = isDark ? '#3f3f46' : '#e2e8f0'
+  const calColor = '#f59e0b'
 
   return (
     <div>
@@ -150,7 +188,10 @@ export function WeightGraph({ entries, period }: Props) {
 
       {/* Chart */}
       <ResponsiveContainer width="100%" height={220}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -8 }}>
+        <ComposedChart
+          data={chartData}
+          margin={{ top: 4, right: hasCalories ? 48 : 4, bottom: 0, left: -8 }}
+        >
           <defs>
             <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor={strokeColor} stopOpacity={isDark ? 0.25 : 0.2} />
@@ -158,11 +199,7 @@ export function WeightGraph({ entries, period }: Props) {
             </linearGradient>
           </defs>
 
-          <CartesianGrid
-            vertical={false}
-            stroke={gridColor}
-            strokeDasharray="0"
-          />
+          <CartesianGrid vertical={false} stroke={gridColor} strokeDasharray="0" />
 
           <XAxis
             dataKey="timestamp"
@@ -178,6 +215,7 @@ export function WeightGraph({ entries, period }: Props) {
           />
 
           <YAxis
+            yAxisId="weight"
             domain={[yMin, yMax]}
             tickFormatter={(v: number) => v.toFixed(0)}
             tick={{ fill: axisColor, fontSize: 11 }}
@@ -186,11 +224,44 @@ export function WeightGraph({ entries, period }: Props) {
             dx={-4}
           />
 
-          <Tooltip content={<CustomTooltip />} cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '4 2' }} />
+          {hasCalories && (
+            <YAxis
+              yAxisId="calories"
+              orientation="right"
+              domain={[0, calDomainMax]}
+              tickFormatter={(v: number) => v.toFixed(0)}
+              tick={{ fill: calColor, fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              dx={4}
+              width={44}
+            />
+          )}
 
-          <ReferenceLine y={avg} stroke={avgLineColor} strokeDasharray="4 2" />
+          <Tooltip
+            content={<CustomTooltip />}
+            cursor={{ stroke: strokeColor, strokeWidth: 1, strokeDasharray: '4 2' }}
+          />
+
+          <ReferenceLine
+            yAxisId="weight"
+            y={avg}
+            stroke={avgLineColor}
+            strokeDasharray="4 2"
+          />
+
+          {hasCalories && (
+            <ReferenceLine
+              yAxisId="calories"
+              y={DAILY_TARGET_KCAL}
+              stroke={calColor}
+              strokeDasharray="4 2"
+              strokeOpacity={0.4}
+            />
+          )}
 
           <Area
+            yAxisId="weight"
             type="monotone"
             dataKey="weight"
             stroke={strokeColor}
@@ -198,8 +269,20 @@ export function WeightGraph({ entries, period }: Props) {
             fill="url(#weightGradient)"
             dot={showDots ? { r: 3, fill: strokeColor, strokeWidth: 0 } : false}
             activeDot={{ r: 5, fill: strokeColor, strokeWidth: 0 }}
+            connectNulls
           />
-        </AreaChart>
+
+          {hasCalories && (
+            <Bar
+              yAxisId="calories"
+              dataKey="calories"
+              fill={calColor}
+              fillOpacity={0.65}
+              barSize={5}
+              radius={[2, 2, 0, 0]}
+            />
+          )}
+        </ComposedChart>
       </ResponsiveContainer>
     </div>
   )

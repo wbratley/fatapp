@@ -3,9 +3,10 @@ import { subDays, subMonths, subYears, formatISO, endOfDay } from 'date-fns'
 import { Header } from '../components/Header'
 import { WeightGraph } from '../components/WeightGraph'
 import { QuickAdd } from '../components/QuickAdd'
+import { BottomNav } from '../components/BottomNav'
 import { usePreferences } from '../context/PreferencesContext'
-import { fetchEntries } from '../api/client'
-import { PERIODS, PERIOD_LABELS, Period, WeightEntry } from '../types'
+import { fetchEntries, fetchCalorieRecords } from '../api/client'
+import { PERIODS, PERIOD_LABELS, Period, WeightEntry, CalorieConsumeRecord } from '../types'
 
 function getPeriodRange(period: Period): { start?: string; end?: string } {
   if (period === 'all') return {}
@@ -26,16 +27,29 @@ export function HomePage() {
   const period = preferences.defaultPeriod
 
   const range = getPeriodRange(period)
+
   const { data = [], isLoading } = useQuery<WeightEntry[]>({
     queryKey: ['entries', period],
     queryFn: () => fetchEntries(range),
+  })
+
+  const { data: calRecords = [] } = useQuery<CalorieConsumeRecord[]>({
+    queryKey: ['calorie-records-range', period],
+    queryFn: () => fetchCalorieRecords(range),
+  })
+
+  // Aggregate calories by date (YYYY-MM-DD)
+  const caloriesByDate: Record<string, number> = {}
+  calRecords.forEach((r) => {
+    const dateKey = r.timestamp.split('T')[0]
+    caloriesByDate[dateKey] = (caloriesByDate[dateKey] ?? 0) + r.total_calories
   })
 
   return (
     <div className="min-h-screen">
       <Header />
 
-      <main className="max-w-2xl mx-auto px-4 py-6 space-y-4">
+      <main className="max-w-2xl mx-auto px-4 py-6 space-y-4 pb-24">
         {/* Period selector + graph */}
         <div className="card p-5">
           {/* Period tabs */}
@@ -56,13 +70,19 @@ export function HomePage() {
               <div className="w-6 h-6 rounded-full border-2 border-indigo-600 border-t-transparent animate-spin" />
             </div>
           ) : (
-            <WeightGraph entries={data} period={period} />
+            <WeightGraph
+              entries={data}
+              period={period}
+              caloriesByDate={Object.keys(caloriesByDate).length > 0 ? caloriesByDate : undefined}
+            />
           )}
         </div>
 
         {/* Quick add */}
         <QuickAdd />
       </main>
+
+      <BottomNav />
     </div>
   )
 }

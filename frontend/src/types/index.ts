@@ -21,3 +21,22 @@ export const PERIOD_LABELS: Record<Period, string> = {
 }
 
 export const PERIODS: Period[] = ['week', 'month', '3months', 'year', 'all']
+
+export interface FoodItem {
+  id: number
+  name: string
+  barcode: string | null
+  calories_per_100g: number
+  deleted_at: string | null
+}
+
+export interface CalorieConsumeRecord {
+  id: number
+  food_item_id: number
+  food_item_name: string
+  grams: number
+  timestamp: string
+  total_calories: number
+}
+
+export const DAILY_TARGET_KCAL = 2000
