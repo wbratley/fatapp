@@ -1,4 +1,4 @@
-import { WeightEntry, FoodItem, CalorieConsumeRecord } from '../types'
+import { WeightEntry, FoodItem, CalorieConsumeRecord, Meal } from '../types'
 
 const BASE = '/api/v1/weight-entries'
 const FOOD_BASE = '/api/v1/food-items'
@@ -105,4 +105,51 @@ export function updateCalorieRecord(
 
 export function deleteCalorieRecord(id: number): Promise<void> {
   return req<void>(`${CAL_BASE}/${id}`, { method: 'DELETE' })
+}
+
+// Meals
+const MEAL_BASE = '/api/v1/meals'
+
+export function fetchMeals(): Promise<Meal[]> {
+  return req<Meal[]>(`${MEAL_BASE}/`)
+}
+
+export function createMeal(data: {
+  name: string
+  items?: Array<{ food_item_id: number; grams: number }>
+}): Promise<Meal> {
+  return req<Meal>(`${MEAL_BASE}/`, { method: 'POST', body: JSON.stringify(data) })
+}
+
+export function updateMeal(id: number, data: { name?: string }): Promise<Meal> {
+  return req<Meal>(`${MEAL_BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
+}
+
+export function deleteMeal(id: number): Promise<void> {
+  return req<void>(`${MEAL_BASE}/${id}`, { method: 'DELETE' })
+}
+
+export function addMealItem(
+  mealId: number,
+  data: { food_item_id: number; grams: number },
+): Promise<Meal> {
+  return req<Meal>(`${MEAL_BASE}/${mealId}/items`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  })
+}
+
+export function updateMealItem(
+  mealId: number,
+  itemId: number,
+  data: { grams: number },
+): Promise<Meal> {
+  return req<Meal>(`${MEAL_BASE}/${mealId}/items/${itemId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+  })
+}
+
+export function removeMealItem(mealId: number, itemId: number): Promise<Meal> {
+  return req<Meal>(`${MEAL_BASE}/${mealId}/items/${itemId}`, { method: 'DELETE' })
 }

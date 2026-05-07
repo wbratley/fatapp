@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom'
-import { Scale, BookOpen, UtensilsCrossed } from 'lucide-react'
+import { Scale, BookOpen, UtensilsCrossed, ChefHat } from 'lucide-react'
 
 const tabs = [
   { to: '/', label: 'Weight', Icon: Scale },
   { to: '/log', label: 'Log', Icon: BookOpen },
   { to: '/foods', label: 'Foods', Icon: UtensilsCrossed },
+  { to: '/meals', label: 'Meals', Icon: ChefHat },
 ]
 
 export function BottomNav() {

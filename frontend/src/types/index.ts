@@ -39,4 +39,21 @@ export interface CalorieConsumeRecord {
   total_calories: number
 }
 
+export interface MealItem {
+  id: number
+  meal_id: number
+  food_item_id: number
+  food_item_name: string
+  grams: number
+  calories: number
+}
+
+export interface Meal {
+  id: number
+  name: string
+  total_calories: number
+  deleted_at: string | null
+  items: MealItem[]
+}
+
 export const DAILY_TARGET_KCAL = 2000

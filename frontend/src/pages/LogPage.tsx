@@ -1,24 +1,20 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { format, parseISO, addDays, subDays } from 'date-fns'
-import { ChevronLeft, ChevronRight, Check, X, Trash2, Pencil, Plus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Check, X, Trash2, Pencil, ChefHat } from 'lucide-react'
 import { Header } from '../components/Header'
 import { BottomNav } from '../components/BottomNav'
 import {
-  fetchFoodItems,
+  fetchMeals,
   fetchCalorieRecords,
   createCalorieRecord,
   updateCalorieRecord,
   deleteCalorieRecord,
 } from '../api/client'
-import { FoodItem, CalorieConsumeRecord, DAILY_TARGET_KCAL } from '../types'
+import { Meal, CalorieConsumeRecord, DAILY_TARGET_KCAL } from '../types'
 
 function todayStr() {
   return format(new Date(), 'yyyy-MM-dd')
-}
-
-function lastGramsKey(foodItemId: number) {
-  return `lastGrams_${foodItemId}`
 }
 
 export function LogPage() {
@@ -31,15 +27,15 @@ export function LogPage() {
   const [editGrams, setEditGrams] = useState('')
   const [deletingId, setDeletingId] = useState<number | null>(null)
 
-  // Quick add state
-  const [addFoodItemId, setAddFoodItemId] = useState<number | ''>('')
-  const [addGrams, setAddGrams] = useState('')
-  const [addError, setAddError] = useState('')
+  // Meal log state
+  const [logMealId, setLogMealId] = useState<number | ''>('')
+  const [logError, setLogError] = useState('')
+  const [loggingMealId, setLoggingMealId] = useState<number | null>(null)
 
   // Data
-  const { data: foodItems = [] } = useQuery<FoodItem[]>({
-    queryKey: ['food-items'],
-    queryFn: () => fetchFoodItems(),
+  const { data: meals = [] } = useQuery<Meal[]>({
+    queryKey: ['meals'],
+    queryFn: () => fetchMeals(),
   })
 
   const { data: records = [], isLoading } = useQuery<CalorieConsumeRecord[]>({
@@ -57,27 +53,33 @@ export function LogPage() {
   }
 
   // Mutations
-  const addMutation = useMutation({
-    mutationFn: () =>
-      createCalorieRecord({
-        food_item_id: addFoodItemId as number,
-        grams: parseFloat(addGrams),
-        timestamp: `${selectedDate}T12:00:00`,
-      }),
-    onSuccess: () => {
-      if (addFoodItemId !== '') {
-        localStorage.setItem(lastGramsKey(addFoodItemId as number), addGrams)
-      }
-      invalidate()
-      setAddGrams('')
-      setAddError('')
+  const logMealMutation = useMutation({
+    mutationFn: async (meal: Meal) => {
+      if (meal.items.length === 0) throw new Error('Meal has no foods')
+      await Promise.all(
+        meal.items.map((item) =>
+          createCalorieRecord({
+            food_item_id: item.food_item_id,
+            grams: item.grams,
+            timestamp: `${selectedDate}T12:00:00`,
+          }),
+        ),
+      )
     },
-    onError: (e: Error) => setAddError(e.message),
+    onSuccess: () => {
+      invalidate()
+      setLogMealId('')
+      setLogError('')
+      setLoggingMealId(null)
+    },
+    onError: (e: Error) => {
+      setLogError(e.message)
+      setLoggingMealId(null)
+    },
   })
 
   const editMutation = useMutation({
-    mutationFn: (id: number) =>
-      updateCalorieRecord(id, { grams: parseFloat(editGrams) }),
+    mutationFn: (id: number) => updateCalorieRecord(id, { grams: parseFloat(editGrams) }),
     onSuccess: () => {
       invalidate()
       setEditingId(null)
@@ -93,21 +95,19 @@ export function LogPage() {
   })
 
   // Handlers
-  function handleFoodItemChange(id: number | '') {
-    setAddFoodItemId(id)
-    setAddError('')
-    if (id !== '') {
-      const saved = localStorage.getItem(lastGramsKey(id as number))
-      if (saved) setAddGrams(saved)
-    }
+  function handleLogMeal(e: React.FormEvent) {
+    e.preventDefault()
+    if (logMealId === '') { setLogError('Select a meal'); return }
+    const meal = meals.find((m) => m.id === logMealId)
+    if (!meal) return
+    setLoggingMealId(meal.id)
+    logMealMutation.mutate(meal)
   }
 
-  function handleAdd(e: React.FormEvent) {
-    e.preventDefault()
-    if (addFoodItemId === '') { setAddError('Select a food item'); return }
-    const g = parseFloat(addGrams)
-    if (!addGrams || isNaN(g) || g <= 0) { setAddError('Enter grams > 0'); return }
-    addMutation.mutate()
+  function handleQuickLog(meal: Meal) {
+    if (loggingMealId !== null) return
+    setLoggingMealId(meal.id)
+    logMealMutation.mutate(meal)
   }
 
   function startEdit(record: CalorieConsumeRecord) {
@@ -122,23 +122,20 @@ export function LogPage() {
     editMutation.mutate(id)
   }
 
-  // Date navigation
   function goPrev() {
-    setSelectedDate(d => format(subDays(parseISO(d), 1), 'yyyy-MM-dd'))
+    setSelectedDate((d) => format(subDays(parseISO(d), 1), 'yyyy-MM-dd'))
   }
 
   function goNext() {
-    setSelectedDate(d => format(addDays(parseISO(d), 1), 'yyyy-MM-dd'))
+    setSelectedDate((d) => format(addDays(parseISO(d), 1), 'yyyy-MM-dd'))
   }
 
   const totalKcal = records.reduce((sum, r) => sum + r.total_calories, 0)
   const pct = Math.min((totalKcal / DAILY_TARGET_KCAL) * 100, 100)
   const barColor =
-    pct >= 100
-      ? 'bg-rose-500'
-      : pct >= 80
-        ? 'bg-amber-500'
-        : 'bg-emerald-500'
+    pct >= 100 ? 'bg-rose-500' : pct >= 80 ? 'bg-amber-500' : 'bg-emerald-500'
+
+  const topMeals = meals.slice(0, 4)
 
   return (
     <div className="min-h-screen">
@@ -166,7 +163,7 @@ export function LogPage() {
             </div>
           ) : records.length === 0 ? (
             <div className="h-32 flex items-center justify-center text-slate-400 dark:text-zinc-600 text-sm">
-              No entries for this day. Add one below.
+              No entries for this day — log a meal below.
             </div>
           ) : (
             <table className="w-full text-sm">
@@ -195,9 +192,7 @@ export function LogPage() {
                             autoFocus
                           />
                         ) : (
-                          <span className="text-slate-600 dark:text-zinc-400">
-                            {record.grams}g
-                          </span>
+                          <span className="text-slate-600 dark:text-zinc-400">{record.grams}g</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-amber-600 dark:text-amber-400 text-xs font-medium">
@@ -222,7 +217,9 @@ export function LogPage() {
                           </div>
                         ) : isDeleting ? (
                           <div className="flex items-center justify-end gap-1">
-                            <span className="text-xs text-slate-500 dark:text-zinc-400 mr-1">Sure?</span>
+                            <span className="text-xs text-slate-500 dark:text-zinc-400 mr-1">
+                              Sure?
+                            </span>
                             <button
                               onClick={() => deleteMutation.mutate(record.id)}
                               disabled={deleteMutation.isPending}
@@ -247,7 +244,10 @@ export function LogPage() {
                               <Pencil size={13} />
                             </button>
                             <button
-                              onClick={() => { setDeletingId(record.id); setEditingId(null) }}
+                              onClick={() => {
+                                setDeletingId(record.id)
+                                setEditingId(null)
+                              }}
                               className="btn-danger px-2 py-1.5"
                               title="Delete"
                             >
@@ -285,61 +285,89 @@ export function LogPage() {
           </div>
         </div>
 
-        {/* Quick add */}
-        <div className="card p-5">
-          <h2 className="text-sm font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wide mb-4">
-            Add entry
-          </h2>
-          <form onSubmit={handleAdd} className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
-                Food item
-              </label>
-              <select
-                value={addFoodItemId}
-                onChange={(e) =>
-                  handleFoodItemChange(e.target.value === '' ? '' : parseInt(e.target.value))
-                }
-                className="input"
-              >
-                <option value="">Select food item…</option>
-                {foodItems.map((fi) => (
-                  <option key={fi.id} value={fi.id}>
-                    {fi.name} ({fi.calories_per_100g} kcal/100g)
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
-                  Grams
-                </label>
-                <input
-                  type="number"
-                  step="1"
-                  min="1"
-                  placeholder="100"
-                  value={addGrams}
-                  onChange={(e) => { setAddGrams(e.target.value); setAddError('') }}
-                  className="input"
-                  autoComplete="off"
-                />
+        {/* Quick-add meal buttons */}
+        {meals.length === 0 ? (
+          <div className="card p-5 flex flex-col items-center gap-2 text-slate-400 dark:text-zinc-600">
+            <ChefHat size={24} className="opacity-30" />
+            <p className="text-sm text-center">
+              No meals yet — create some on the{' '}
+              <span className="text-indigo-500 dark:text-indigo-400">Meals</span> tab
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {/* Top 4 quick-add tiles */}
+            {topMeals.length > 0 && (
+              <div className="grid grid-cols-2 gap-3">
+                {topMeals.map((meal) => {
+                  const isLogging = loggingMealId === meal.id
+                  return (
+                    <button
+                      key={meal.id}
+                      onClick={() => handleQuickLog(meal)}
+                      disabled={loggingMealId !== null || meal.items.length === 0}
+                      className="card p-4 text-left hover:bg-indigo-50 dark:hover:bg-indigo-950/30 hover:border-indigo-200 dark:hover:border-indigo-800 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isLogging ? (
+                        <div className="flex items-center justify-center h-12">
+                          <div className="w-5 h-5 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-semibold text-slate-800 dark:text-zinc-100 truncate text-sm leading-tight">
+                            {meal.name}
+                          </p>
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                            {Math.round(meal.total_calories)} kcal
+                          </p>
+                          <p className="text-xs text-slate-400 dark:text-zinc-500 mt-0.5">
+                            {meal.items.length === 0
+                              ? 'No foods'
+                              : `${meal.items.length} food${meal.items.length !== 1 ? 's' : ''}`}
+                          </p>
+                        </>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
-              <button
-                type="submit"
-                disabled={addMutation.isPending}
-                className="btn-primary h-[38px] shrink-0"
-              >
-                <Plus size={15} />
-                Add
-              </button>
+            )}
+
+            {/* Log any meal (dropdown) */}
+            <div className="card p-5">
+              <h2 className="text-sm font-semibold text-slate-500 dark:text-zinc-400 uppercase tracking-wide mb-4">
+                Log a meal
+              </h2>
+              <form onSubmit={handleLogMeal} className="space-y-3">
+                <select
+                  value={logMealId}
+                  onChange={(e) => {
+                    setLogMealId(e.target.value === '' ? '' : parseInt(e.target.value))
+                    setLogError('')
+                  }}
+                  className="input"
+                >
+                  <option value="">Select meal…</option>
+                  {meals.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name} — {Math.round(m.total_calories)} kcal
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  disabled={logMealMutation.isPending}
+                  className="btn-primary w-full"
+                >
+                  Log meal
+                </button>
+              </form>
+              {logError && (
+                <p className="mt-2 text-xs text-rose-500 dark:text-rose-400">{logError}</p>
+              )}
             </div>
-          </form>
-          {addError && (
-            <p className="mt-2 text-xs text-rose-500 dark:text-rose-400">{addError}</p>
-          )}
-        </div>
+          </div>
+        )}
       </main>
 
       <BottomNav />

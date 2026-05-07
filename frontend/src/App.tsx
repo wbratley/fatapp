@@ -5,6 +5,7 @@ import { HomePage } from './pages/HomePage'
 import { ManagePage } from './pages/ManagePage'
 import { LogPage } from './pages/LogPage'
 import { FoodsPage } from './pages/FoodsPage'
+import { MealsPage } from './pages/MealsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +23,7 @@ export default function App() {
             <Route path="/manage" element={<ManagePage />} />
             <Route path="/log" element={<LogPage />} />
             <Route path="/foods" element={<FoodsPage />} />
+            <Route path="/meals" element={<MealsPage />} />
           </Routes>
         </BrowserRouter>
       </PreferencesProvider>
