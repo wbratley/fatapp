@@ -96,18 +96,22 @@ class FoodItemService:
         if round(product.calories_per_100g, 2) != round(item.calories_per_100g, 2):
             changes.append(f"calories updated {item.calories_per_100g} → {product.calories_per_100g} kcal/100g")
 
-        if product.serving_quantity is not None and product.serving_quantity != item.portion_size_g:
-            new_portion_size = product.serving_quantity
-            update_portions = True
-            if item.portion_size_g is None:
-                changes.append(f"portion size set to {product.serving_quantity}g")
-            else:
-                changes.append(f"portion size updated {item.portion_size_g} → {product.serving_quantity}g")
-
-        if product.serving_label is not None and item.portion_label is None and new_portion_size is not None:
-            new_portion_label = product.serving_label
-            update_portions = True
-            changes.append(f"portion label set to \"{product.serving_label}\"")
+        if product.serving_quantity is not None:
+            # Use existing label if set, otherwise fall back to what OFF gives us
+            candidate_label = item.portion_label or product.serving_label
+            # Only update portions if we end up with a complete pair
+            if candidate_label is not None:
+                if product.serving_quantity != item.portion_size_g:
+                    new_portion_size = product.serving_quantity
+                    update_portions = True
+                    if item.portion_size_g is None:
+                        changes.append(f"portion size set to {product.serving_quantity}g")
+                    else:
+                        changes.append(f"portion size updated {item.portion_size_g} → {product.serving_quantity}g")
+                if candidate_label != item.portion_label:
+                    new_portion_label = candidate_label
+                    update_portions = True
+                    changes.append(f"portion label set to \"{candidate_label}\"")
 
         item = self._repo.update(
             item,

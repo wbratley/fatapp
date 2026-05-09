@@ -16,6 +16,9 @@ def _run_migrations() -> None:
         for sql in [
             "ALTER TABLE food_items ADD COLUMN portion_size_g REAL",
             "ALTER TABLE food_items ADD COLUMN portion_label TEXT",
+            # Fix any rows left with only one of the pair set
+            "UPDATE food_items SET portion_size_g = NULL WHERE portion_size_g IS NOT NULL AND portion_label IS NULL",
+            "UPDATE food_items SET portion_label = NULL WHERE portion_label IS NOT NULL AND portion_size_g IS NULL",
         ]:
             try:
                 conn.execute(text(sql))

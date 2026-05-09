@@ -10,15 +10,13 @@ class FoodItemBase(BaseModel):
     portion_size_g: float | None = Field(None, gt=0)
     portion_label: str | None = None
 
+
+class FoodItemCreate(FoodItemBase):
     @model_validator(mode='after')
     def _check_portion_pair(self):
         if (self.portion_size_g is None) != (self.portion_label is None):
             raise ValueError('portion_size_g and portion_label must both be set or both be null')
         return self
-
-
-class FoodItemCreate(FoodItemBase):
-    pass
 
 
 class FoodItemUpdate(BaseModel):
