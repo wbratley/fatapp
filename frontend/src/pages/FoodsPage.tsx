@@ -96,10 +96,15 @@ export function FoodsPage() {
     onMutate: (id) => setRefreshingId(id),
     onSuccess: (result) => {
       invalidate()
-      const msg = result.changes.length > 0
-        ? result.changes.join(', ')
-        : 'Already up to date'
-      setToast({ msg, type: 'success' })
+      if (result.food_item.portion_size_g !== null && result.food_item.portion_label === null) {
+        openEdit(result.food_item)
+        setToast({ msg: 'Portion size set — add a label to enable portion logging', type: 'success' })
+      } else {
+        const msg = result.changes.length > 0
+          ? result.changes.join(', ')
+          : 'Already up to date'
+        setToast({ msg, type: 'success' })
+      }
     },
     onError: (e: Error) => setToast({ msg: e.message, type: 'error' }),
     onSettled: () => setRefreshingId(null),
