@@ -13,4 +13,6 @@ class FoodItem(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     barcode: Mapped[str | None] = mapped_column(String, unique=True, nullable=True, index=True)
     calories_per_100g: Mapped[float] = mapped_column(Float, nullable=False)
+    portion_size_g: Mapped[float | None] = mapped_column(Float, nullable=True)
+    portion_label: Mapped[str | None] = mapped_column(String, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

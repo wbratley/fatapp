@@ -24,8 +24,21 @@ class FoodItemRepository:
         stmt = select(FoodItem).where(FoodItem.barcode == barcode)
         return self._db.scalars(stmt).first()
 
-    def create(self, name: str, barcode: str | None, calories_per_100g: float) -> FoodItem:
-        item = FoodItem(name=name, barcode=barcode, calories_per_100g=calories_per_100g)
+    def create(
+        self,
+        name: str,
+        barcode: str | None,
+        calories_per_100g: float,
+        portion_size_g: float | None = None,
+        portion_label: str | None = None,
+    ) -> FoodItem:
+        item = FoodItem(
+            name=name,
+            barcode=barcode,
+            calories_per_100g=calories_per_100g,
+            portion_size_g=portion_size_g,
+            portion_label=portion_label,
+        )
         self._db.add(item)
         self._db.commit()
         self._db.refresh(item)
@@ -37,6 +50,9 @@ class FoodItemRepository:
         name: str | None,
         barcode: str | None,
         calories_per_100g: float | None,
+        portion_size_g: float | None = None,
+        portion_label: str | None = None,
+        update_portions: bool = False,
     ) -> FoodItem:
         if name is not None:
             item.name = name
@@ -44,6 +60,9 @@ class FoodItemRepository:
             item.barcode = barcode
         if calories_per_100g is not None:
             item.calories_per_100g = calories_per_100g
+        if update_portions:
+            item.portion_size_g = portion_size_g
+            item.portion_label = portion_label
         self._db.commit()
         self._db.refresh(item)
         return item

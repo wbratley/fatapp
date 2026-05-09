@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Pencil, Trash2, Plus, X, ScanBarcode } from 'lucide-react'
+import { Pencil, Trash2, Plus, X, ScanBarcode, RefreshCw } from 'lucide-react'
 import { Header } from '../components/Header'
 import { BottomNav } from '../components/BottomNav'
 import { BarcodeScanner } from '../components/BarcodeScanner'
@@ -11,6 +11,7 @@ import {
   updateFoodItem,
   deleteFoodItem,
   lookupBarcode,
+  refreshFoodItem,
 } from '../api/client'
 import { FoodItem } from '../types'
 
@@ -21,6 +22,8 @@ interface ModalState {
   name: string
   calories: string
   barcode: string
+  portionSize: string
+  portionLabel: string
   error: string
 }
 
@@ -31,6 +34,8 @@ const CLOSED: ModalState = {
   name: '',
   calories: '',
   barcode: '',
+  portionSize: '',
+  portionLabel: '',
   error: '',
 }
 
@@ -56,10 +61,14 @@ export function FoodsPage() {
 
   const saveMutation = useMutation({
     mutationFn: () => {
+      const portionSize = modal.portionSize ? parseFloat(modal.portionSize) : null
+      const portionLabel = modal.portionLabel.trim() || null
       const payload = {
         name: modal.name.trim(),
         calories_per_100g: parseFloat(modal.calories),
         barcode: modal.barcode.trim() || null,
+        portion_size_g: portionSize,
+        portion_label: portionLabel,
       }
       return modal.mode === 'add'
         ? createFoodItem(payload)
@@ -80,8 +89,24 @@ export function FoodsPage() {
     },
   })
 
+  const [refreshingId, setRefreshingId] = useState<number | null>(null)
+
+  const refreshMutation = useMutation({
+    mutationFn: (id: number) => refreshFoodItem(id),
+    onMutate: (id) => setRefreshingId(id),
+    onSuccess: (result) => {
+      invalidate()
+      const msg = result.changes.length > 0
+        ? result.changes.join(', ')
+        : 'Already up to date'
+      setToast({ msg, type: 'success' })
+    },
+    onError: (e: Error) => setToast({ msg: e.message, type: 'error' }),
+    onSettled: () => setRefreshingId(null),
+  })
+
   function openAdd() {
-    setModal({ open: true, mode: 'add', item: null, name: '', calories: '', barcode: '', error: '' })
+    setModal({ open: true, mode: 'add', item: null, name: '', calories: '', barcode: '', portionSize: '', portionLabel: '', error: '' })
   }
 
   function openEdit(item: FoodItem) {
@@ -92,6 +117,8 @@ export function FoodsPage() {
       name: item.name,
       calories: item.calories_per_100g.toString(),
       barcode: item.barcode ?? '',
+      portionSize: item.portion_size_g?.toString() ?? '',
+      portionLabel: item.portion_label ?? '',
       error: '',
     })
   }
@@ -102,6 +129,12 @@ export function FoodsPage() {
     const cal = parseFloat(modal.calories)
     if (!modal.calories || isNaN(cal) || cal <= 0) {
       setModal((m) => ({ ...m, error: 'Calories must be > 0' }))
+      return
+    }
+    const hasPSize = modal.portionSize !== '' && !isNaN(parseFloat(modal.portionSize)) && parseFloat(modal.portionSize) > 0
+    const hasPLabel = modal.portionLabel.trim() !== ''
+    if (hasPSize !== hasPLabel) {
+      setModal((m) => ({ ...m, error: 'Portion size and label must both be filled or both empty' }))
       return
     }
     saveMutation.mutate()
@@ -129,6 +162,8 @@ export function FoodsPage() {
           name: '',
           calories: '',
           barcode,
+          portionSize: '',
+          portionLabel: '',
           error: '',
         })
       }
@@ -172,6 +207,9 @@ export function FoodsPage() {
                       </p>
                       <p className="text-xs text-slate-400 dark:text-zinc-500">
                         {item.calories_per_100g} kcal/100g
+                        {item.portion_size_g && item.portion_label && (
+                          <span className="ml-2">· 1 {item.portion_label} = {item.portion_size_g}g</span>
+                        )}
                         {item.barcode && (
                           <span className="ml-2 font-mono">{item.barcode}</span>
                         )}
@@ -197,6 +235,16 @@ export function FoodsPage() {
                       </div>
                     ) : (
                       <div className="flex items-center gap-1 shrink-0 opacity-0 [li:hover_&]:opacity-100 transition-opacity">
+                        {item.barcode && (
+                          <button
+                            onClick={() => refreshMutation.mutate(item.id)}
+                            disabled={refreshingId === item.id}
+                            className="btn-ghost px-2 py-1.5"
+                            title="Refresh from Open Food Facts"
+                          >
+                            <RefreshCw size={13} className={refreshingId === item.id ? 'animate-spin' : ''} />
+                          </button>
+                        )}
                         <button
                           onClick={() => openEdit(item)}
                           className="btn-ghost px-2 py-1.5"
@@ -311,6 +359,37 @@ export function FoodsPage() {
                   onChange={(e) => setModal((m) => ({ ...m, barcode: e.target.value, error: '' }))}
                   className="input font-mono"
                 />
+              </div>
+
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
+                    Portion size (g){' '}
+                    <span className="font-normal text-slate-400 dark:text-zinc-600">(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min="0.1"
+                    placeholder="e.g. 60"
+                    value={modal.portionSize}
+                    onChange={(e) => setModal((m) => ({ ...m, portionSize: e.target.value, error: '' }))}
+                    className="input"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
+                    Portion label{' '}
+                    <span className="font-normal text-slate-400 dark:text-zinc-600">(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. egg"
+                    value={modal.portionLabel}
+                    onChange={(e) => setModal((m) => ({ ...m, portionLabel: e.target.value, error: '' }))}
+                    className="input"
+                  />
+                </div>
               </div>
 
               {modal.error && (

@@ -5,6 +5,7 @@ from app.repositories.food_item import FoodItemRepository
 from app.schemas.food_item import (
     BarcodeLookupResponse,
     FoodItemCreate,
+    FoodItemRefreshResponse,
     FoodItemResponse,
     FoodItemUpdate,
 )
@@ -33,6 +34,8 @@ class FoodItemService:
             name=payload.name,
             barcode=payload.barcode,
             calories_per_100g=payload.calories_per_100g,
+            portion_size_g=payload.portion_size_g,
+            portion_label=payload.portion_label,
         )
         return FoodItemResponse.model_validate(item)
 
@@ -46,11 +49,15 @@ class FoodItemService:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT, detail="Barcode already in use"
                 )
+        update_portions = bool({'portion_size_g', 'portion_label'} & payload.model_fields_set)
         item = self._repo.update(
             item,
             name=payload.name,
             barcode=payload.barcode,
             calories_per_100g=payload.calories_per_100g,
+            portion_size_g=payload.portion_size_g,
+            portion_label=payload.portion_label,
+            update_portions=update_portions,
         )
         return FoodItemResponse.model_validate(item)
 
@@ -69,6 +76,52 @@ class FoodItemService:
             calories_per_100g=product.calories_per_100g,
         )
         return BarcodeLookupResponse(found=True, food_item=FoodItemResponse.model_validate(item))
+
+    def refresh_food_item(self, item_id: int, client: OpenFoodFactsClient) -> FoodItemRefreshResponse:
+        item = self._repo.get_by_id(item_id)
+        if item is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Food item not found")
+        if item.barcode is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Food item has no barcode")
+
+        product = client.lookup(item.barcode)
+        if product is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Barcode not found on Open Food Facts")
+
+        changes: list[str] = []
+        new_portion_size = item.portion_size_g
+        new_portion_label = item.portion_label
+        update_portions = False
+
+        if round(product.calories_per_100g, 2) != round(item.calories_per_100g, 2):
+            changes.append(f"calories updated {item.calories_per_100g} → {product.calories_per_100g} kcal/100g")
+
+        if product.serving_quantity is not None and product.serving_quantity != item.portion_size_g:
+            new_portion_size = product.serving_quantity
+            update_portions = True
+            if item.portion_size_g is None:
+                changes.append(f"portion size set to {product.serving_quantity}g")
+            else:
+                changes.append(f"portion size updated {item.portion_size_g} → {product.serving_quantity}g")
+
+        if product.serving_label is not None and item.portion_label is None and new_portion_size is not None:
+            new_portion_label = product.serving_label
+            update_portions = True
+            changes.append(f"portion label set to \"{product.serving_label}\"")
+
+        item = self._repo.update(
+            item,
+            name=None,
+            barcode=None,
+            calories_per_100g=product.calories_per_100g,
+            portion_size_g=new_portion_size,
+            portion_label=new_portion_label,
+            update_portions=update_portions,
+        )
+        return FoodItemRefreshResponse(
+            food_item=FoodItemResponse.model_validate(item),
+            changes=changes,
+        )
 
     def delete_food_item(self, item_id: int) -> None:
         item = self._repo.get_by_id(item_id)

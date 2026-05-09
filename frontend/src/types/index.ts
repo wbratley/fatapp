@@ -27,6 +27,8 @@ export interface FoodItem {
   name: string
   barcode: string | null
   calories_per_100g: number
+  portion_size_g: number | null
+  portion_label: string | null
   deleted_at: string | null
 }
 

@@ -50,19 +50,30 @@ export function createFoodItem(data: {
   name: string
   calories_per_100g: number
   barcode?: string | null
+  portion_size_g?: number | null
+  portion_label?: string | null
 }): Promise<FoodItem> {
   return req<FoodItem>(`${FOOD_BASE}/`, { method: 'POST', body: JSON.stringify(data) })
 }
 
 export function updateFoodItem(
   id: number,
-  data: { name?: string; calories_per_100g?: number; barcode?: string | null },
+  data: { name?: string; calories_per_100g?: number; barcode?: string | null; portion_size_g?: number | null; portion_label?: string | null },
 ): Promise<FoodItem> {
   return req<FoodItem>(`${FOOD_BASE}/${id}`, { method: 'PATCH', body: JSON.stringify(data) })
 }
 
 export function deleteFoodItem(id: number): Promise<void> {
   return req<void>(`${FOOD_BASE}/${id}`, { method: 'DELETE' })
+}
+
+export interface FoodItemRefreshResponse {
+  food_item: FoodItem
+  changes: string[]
+}
+
+export function refreshFoodItem(id: number): Promise<FoodItemRefreshResponse> {
+  return req<FoodItemRefreshResponse>(`${FOOD_BASE}/${id}/refresh`, { method: 'POST' })
 }
 
 export interface BarcodeLookupResponse {

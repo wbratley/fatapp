@@ -7,6 +7,7 @@ from app.repositories.food_item import FoodItemRepository
 from app.schemas.food_item import (
     BarcodeLookupResponse,
     FoodItemCreate,
+    FoodItemRefreshResponse,
     FoodItemResponse,
     FoodItemUpdate,
 )
@@ -55,6 +56,15 @@ def delete_food_item(
     item_id: int, service: FoodItemService = Depends(get_service)
 ) -> None:
     service.delete_food_item(item_id)
+
+
+@router.post("/{item_id}/refresh", response_model=FoodItemRefreshResponse)
+def refresh_food_item(
+    item_id: int,
+    service: FoodItemService = Depends(get_service),
+    off_client: OpenFoodFactsClient = Depends(OpenFoodFactsClient),
+) -> FoodItemRefreshResponse:
+    return service.refresh_food_item(item_id, off_client)
 
 
 @router.post("/barcode/{barcode}", response_model=BarcodeLookupResponse)

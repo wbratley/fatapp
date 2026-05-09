@@ -63,6 +63,8 @@ export function MealsPage() {
   })
 
   const selectedMeal = meals.find((m) => m.id === selectedMealId) ?? null
+  const selectedFood = foodItems.find((fi) => fi.id === addFoodId) ?? null
+  const usePortions = !!(selectedFood?.portion_size_g && selectedFood?.portion_label)
 
   // Reset name input when navigating to a different meal
   const selectedId = selectedMeal?.id
@@ -111,11 +113,14 @@ export function MealsPage() {
   })
 
   const addItemMutation = useMutation({
-    mutationFn: () =>
-      addMealItem(selectedMealId!, {
+    mutationFn: () => {
+      const rawVal = parseFloat(addGrams)
+      const grams = usePortions ? rawVal * selectedFood!.portion_size_g! : rawVal
+      return addMealItem(selectedMealId!, {
         food_item_id: addFoodId as number,
-        grams: parseFloat(addGrams),
-      }),
+        grams,
+      })
+    },
     onSuccess: () => {
       invalidateMeals()
       setAddFoodId('')
@@ -208,8 +213,11 @@ export function MealsPage() {
   function handleAddFood(e: React.FormEvent) {
     e.preventDefault()
     if (addFoodId === '') { setAddError('Select a food'); return }
-    const g = parseFloat(addGrams)
-    if (!addGrams || isNaN(g) || g <= 0) { setAddError('Enter grams > 0'); return }
+    const val = parseFloat(addGrams)
+    if (!addGrams || isNaN(val) || val <= 0) {
+      setAddError(usePortions ? `Enter number of ${selectedFood?.portion_label}s > 0` : 'Enter grams > 0')
+      return
+    }
     addItemMutation.mutate()
   }
 
@@ -505,6 +513,7 @@ export function MealsPage() {
                       value={addFoodId}
                       onChange={(e) => {
                         setAddFoodId(e.target.value === '' ? '' : parseInt(e.target.value))
+                        setAddGrams('')
                         setAddError('')
                       }}
                       className="input flex-1"
@@ -533,13 +542,13 @@ export function MealsPage() {
                   <div className="flex items-end gap-3">
                     <div className="flex-1">
                       <label className="block text-xs font-medium text-slate-500 dark:text-zinc-400 mb-1.5">
-                        Grams
+                        {usePortions ? `Portions (${selectedFood!.portion_label}s)` : 'Grams'}
                       </label>
                       <input
                         type="number"
-                        step="1"
-                        min="1"
-                        placeholder="100"
+                        step={usePortions ? '0.5' : '1'}
+                        min={usePortions ? '0.5' : '1'}
+                        placeholder={usePortions ? '1' : '100'}
                         value={addGrams}
                         onChange={(e) => {
                           setAddGrams(e.target.value)
@@ -548,6 +557,11 @@ export function MealsPage() {
                         className="input"
                         autoComplete="off"
                       />
+                      {usePortions && addGrams && !isNaN(parseFloat(addGrams)) && (
+                        <p className="text-xs text-slate-400 dark:text-zinc-500 mt-1">
+                          = {(parseFloat(addGrams) * selectedFood!.portion_size_g!).toFixed(0)}g
+                        </p>
+                      )}
                     </div>
                     <button
                       type="submit"
